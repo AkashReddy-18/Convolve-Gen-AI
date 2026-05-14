@@ -44,7 +44,7 @@ The pipeline extracts the following schema for every document:
 
 ## Repository Structure
 The repository is organized into a single `Final_submission/` directory for simplicity:
-*   `Final_submission/Qwen2VL_Invoice_Extraction.ipynb`: Main development and execution notebook. Contains the complete model pipeline, preprocessing logic, and unit tests.
+*   `Final_submission/main.py`: Main development and execution notebook. Contains the complete model pipeline, preprocessing logic, and unit tests.
 *   `Final_submission/requirements.txt`: Python dependencies required to run the notebook.
 *   `Final_submission/result.json`: The consolidated output of the extraction from the `train/` dataset.
 *   `Final_submission/README.md`: This documentation.
@@ -52,7 +52,7 @@ The repository is organized into a single `Final_submission/` directory for simp
 ## Execution Guide
 
 ### Option 1: Google Colab (Recommended)
-1. Open `Qwen2VL_Invoice_Extraction.ipynb` in Google Colab.
+1. Open `main.py` in Google Colab.
 2. Change the Runtime type to **GPU** (T4 or higher).
 3. Run all cells. The notebook will automatically install dependencies from the code cells, load the model, and process your invoices.
 4. Results will be saved and can be downloaded as JSON.
@@ -66,7 +66,7 @@ Ensure you have a GPU-enabled Linux environment with Python 3.10+.
    ```
 2. **Open the Notebook:**
    ```bash
-   jupyter notebook Final_submission/Qwen2VL_Invoice_Extraction.ipynb
+   jupyter notebook Final_submission/main.py
    ```
 
 ## Limitations & Notes
