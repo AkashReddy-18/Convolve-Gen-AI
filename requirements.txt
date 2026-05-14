@@ -1,0 +1,16 @@
+# System Dependencies (Linux)
+# sudo apt-get install poppler-utils
+
+# Python Dependencies
+torch>=2.0.0
+torchvision
+transformers>=4.45.0
+accelerate
+qwen-vl-utils
+pdf2image
+pillow
+qwen-vl-utils
+pymupdf
+tqdm
+einops
+opencv-python-headless
