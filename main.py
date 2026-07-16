@@ -31,6 +31,17 @@ class VLMProcessor:
         except Exception as e:
             sys.exit(f"Critical Error: Failed to load model. {e}")
 
+    # FIX: Default schema ensures every result has all expected keys,
+    # even if the model returns partial or empty JSON.
+    DEFAULT_SCHEMA = {
+        "dealer_name": None,
+        "model_name": None,
+        "horse_power": None,
+        "asset_cost": None,
+        "stamp": {"present": False, "bbox": []},
+        "signature": {"present": False, "bbox": []},
+    }
+
     def extract(self, image):
         prompt = """Analyze this invoice page. Extract fields to JSON:
         - "dealer_name": string or null
@@ -74,16 +85,46 @@ class VLMProcessor:
                     generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
                 )[0]
 
-            # Parse JSON
+            # FIX: Free GPU tensors after inference to prevent OOM on large batches.
+            del inputs, generated_ids, generated_ids_trimmed
+            if self.device == "cuda":
+                torch.cuda.empty_cache()
+
+            # Parse JSON and merge with default schema
             start = response.find("{")
             end = response.rfind("}")
             if start != -1 and end != -1:
-                return json.loads(response[start:end+1])
-            return {}
+                parsed = json.loads(response[start:end+1])
+                # FIX: Merge with default schema so missing keys don't cause
+                # downstream KeyErrors (e.g., if model omits "signature").
+                result = {**self.DEFAULT_SCHEMA, **parsed}
+                return self._apply_business_rules(result)
+            return dict(self.DEFAULT_SCHEMA)
 
         except Exception as e:
-            # print(f"Extraction warning: {e}") # Uncomment for debug
-            return {}
+            # FIX: Log the warning by default instead of silently swallowing.
+            # Silent failures make debugging nearly impossible on large batches.
+            print(f"Extraction warning: {e}")
+            return dict(self.DEFAULT_SCHEMA)
+
+    def _apply_business_rules(self, fields):
+        """
+        FIX: Enforce business rules in deterministic Python code instead of
+        relying solely on the VLM prompt. LLMs don't reliably follow
+        conditional logic, so this guarantees the stamp→signature rule.
+        """
+        stamp = fields.get("stamp", {})
+        signature = fields.get("signature", {})
+
+        # Business Rule: If stamp is present but signature is missing,
+        # reuse the stamp's bounding box for the signature field.
+        if stamp.get("present") and not signature.get("present"):
+            fields["signature"] = {
+                "present": True,
+                "bbox": stamp.get("bbox", []),
+            }
+
+        return fields
 
 # =====================================================
 # 2. FILE HANDLING
@@ -104,10 +145,14 @@ def load_images_from_file(path):
 def calculate_confidence(fields):
     """Simple heuristic for confidence score based on non-empty fields."""
     score = 0
-    if fields.get("dealer_name"): score += 0.2
-    if fields.get("model_name"): score += 0.2
-    if fields.get("horse_power"): score += 0.2
-    if fields.get("asset_cost"): score += 0.2
+    # FIX: Original code used truthy checks like `if fields.get("horse_power")`.
+    # This is a bug because valid numeric values like 0 are falsy in Python,
+    # so a horse_power of 0 would wrongly be scored as "missing".
+    # Using `is not None` correctly treats 0 as a present value.
+    if fields.get("dealer_name") is not None: score += 0.2
+    if fields.get("model_name") is not None: score += 0.2
+    if fields.get("horse_power") is not None: score += 0.2
+    if fields.get("asset_cost") is not None: score += 0.2
     if fields.get("stamp", {}).get("present"): score += 0.1
     if fields.get("signature", {}).get("present"): score += 0.1
     return round(score, 2)
@@ -122,7 +167,9 @@ def process_folder(input_folder, output_file, vlm_processor):
 
     # Gather all supported files
     supported_exts = ('.png', '.jpg', '.jpeg', '.pdf', '.tiff', '.bmp')
-    files = [f for f in os.listdir(input_folder) if f.lower().endswith(supported_exts)]
+    # FIX: Sort files for deterministic, reproducible processing order.
+    # os.listdir() returns files in arbitrary OS-dependent order.
+    files = sorted([f for f in os.listdir(input_folder) if f.lower().endswith(supported_exts)])
     
     if not files:
         print(f"No supported files found in {input_folder}")
